@@ -33,6 +33,10 @@ def post_to_dict(post):
 
 @require_http_methods(["GET"])
 def get_all_posts(request):
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
     posts = Post.objects.select_related('author').order_by('-created_at')
     data = [post_to_dict(post) for post in posts]
     return JsonResponse({'posts': data})
@@ -40,6 +44,10 @@ def get_all_posts(request):
 
 @require_http_methods(["GET"])
 def get_post(request, post_id):
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
     try:
         post = Post.objects.select_related('author').get(id=post_id)
         return JsonResponse(post_to_dict(post))

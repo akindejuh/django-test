@@ -80,8 +80,8 @@ A RESTful API built with Django for managing posts with JWT authentication, Redi
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/posts/` | Get all posts | No |
-| GET | `/posts/<id>/` | Get a single post | No |
+| GET | `/posts/` | Get all posts | Yes |
+| GET | `/posts/<id>/` | Get a single post | Yes |
 | POST | `/posts/create/` | Create a new post (costs wallet fee) | Yes |
 | PUT/PATCH | `/posts/<id>/edit/` | Update a post (owner only) | Yes |
 | DELETE | `/posts/<id>/delete/` | Delete a post (owner only) | Yes |
