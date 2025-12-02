@@ -1,6 +1,6 @@
 # Django Posts API
 
-A RESTful API built with Django for managing posts with JWT authentication and Redis-based token blacklisting.
+A RESTful API built with Django for managing posts with JWT authentication, Redis-based token blacklisting, and Stripe-powered wallet system.
 
 ## Features
 
@@ -9,6 +9,8 @@ A RESTful API built with Django for managing posts with JWT authentication and R
 - **Posts CRUD**: Create, read, update, and delete posts
 - **Role-based Users**: Support for "viewer" and "editor" user types
 - **Rating System**: Posts include a 1-5 rating system
+- **Wallet System**: User wallets with balance tracking and transaction history
+- **Stripe Integration**: Fund wallet via Stripe payments
 
 ## Tech Stack
 
@@ -16,6 +18,7 @@ A RESTful API built with Django for managing posts with JWT authentication and R
 - Django 5.2
 - PyJWT for authentication
 - Redis for token blacklisting
+- Stripe for payment processing
 - SQLite (default database)
 
 ## Installation
@@ -73,15 +76,26 @@ A RESTful API built with Django for managing posts with JWT authentication and R
 | POST | `/auth/login/` | Login and get JWT token |
 | POST | `/auth/logout/` | Logout and blacklist token |
 
-### Posts (Protected - requires JWT)
+### Posts
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/posts/` | Get all posts |
-| GET | `/posts/<id>/` | Get a single post |
-| POST | `/posts/create/` | Create a new post |
-| PUT/PATCH | `/posts/<id>/edit/` | Update a post |
-| DELETE | `/posts/<id>/delete/` | Delete a post |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/posts/` | Get all posts | No |
+| GET | `/posts/<id>/` | Get a single post | No |
+| POST | `/posts/create/` | Create a new post (costs wallet fee) | Yes |
+| PUT/PATCH | `/posts/<id>/edit/` | Update a post (owner only) | Yes |
+| DELETE | `/posts/<id>/delete/` | Delete a post (owner only) | Yes |
+
+### Wallet
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/wallet/balance/` | Get wallet balance | Yes |
+| GET | `/wallet/transactions/` | Get transaction history (last 50) | Yes |
+| POST | `/wallet/fund/` | Create Stripe payment intent | Yes |
+| POST | `/wallet/webhook/stripe/` | Stripe webhook handler | No* |
+
+*Webhook is verified using Stripe signature
 
 ## Usage Examples
 
@@ -172,6 +186,64 @@ curl -X POST http://localhost:8000/auth/logout/ \
   -H "Authorization: Bearer <your_token>"
 ```
 
+### Get Wallet Balance
+
+```bash
+curl http://localhost:8000/wallet/balance/ \
+  -H "Authorization: Bearer <your_token>"
+```
+
+Response:
+```json
+{
+  "balance": "100.00",
+  "currency": "USD"
+}
+```
+
+### Get Transaction History
+
+```bash
+curl http://localhost:8000/wallet/transactions/ \
+  -H "Authorization: Bearer <your_token>"
+```
+
+Response:
+```json
+{
+  "transactions": [
+    {
+      "id": 1,
+      "amount": "10.00",
+      "type": "deposit",
+      "description": "Stripe deposit",
+      "created_at": "2025-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Fund Wallet (Create Payment Intent)
+
+```bash
+curl -X POST http://localhost:8000/wallet/fund/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_token>" \
+  -d '{
+    "amount": 10.00
+  }'
+```
+
+Response:
+```json
+{
+  "client_secret": "pi_xxx_secret_xxx",
+  "payment_intent_id": "pi_xxx"
+}
+```
+
+Use the `client_secret` with Stripe.js on the frontend to complete the payment. Minimum deposit is $1.00.
+
 ## Data Models
 
 ### User
@@ -193,10 +265,33 @@ curl -X POST http://localhost:8000/auth/logout/ \
 | title | string | Post title (max 200 chars) |
 | description | text | Post content |
 | rating | integer | Rating from 1 to 5 |
+| author | FK | Reference to User |
 | created_at | datetime | Creation timestamp |
 | updated_at | datetime | Last update timestamp |
 
+### Wallet
+
+| Field | Type | Description |
+|-------|------|-------------|
+| user | OneToOne | Reference to User |
+| balance | decimal | Current balance (USD) |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+
+### Transaction
+
+| Field | Type | Description |
+|-------|------|-------------|
+| wallet | FK | Reference to Wallet |
+| amount | decimal | Transaction amount |
+| transaction_type | string | "deposit" or "withdrawal" |
+| description | string | Transaction description |
+| stripe_payment_intent_id | string | Stripe payment ID (for deposits) |
+| created_at | datetime | Transaction timestamp |
+
 ## Configuration
+
+### Redis Settings
 
 Redis settings can be configured in `myproject/settings.py`:
 
@@ -205,6 +300,23 @@ REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_DB = 0
 TOKEN_BLACKLIST_TTL = 60 * 60 * 24 * 2  # 2 days
+```
+
+### Stripe Settings
+
+Configure Stripe via environment variables:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+```
+
+### Post Creation Cost
+
+Set the fee deducted from wallet when creating a post:
+
+```python
+POST_CREATION_COST = '1.00'  # $1.00 per post
 ```
 
 ## License
