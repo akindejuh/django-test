@@ -23,4 +23,5 @@ urlpatterns = [
     path('', views.homepage),
     path('auth/', include('accounts.urls')),
     path('posts/', include('posts.urls')),
+    path('wallet/', include('wallet.urls')),
 ]

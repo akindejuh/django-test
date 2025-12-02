@@ -1,8 +1,11 @@
 import json
+from decimal import Decimal
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from .models import Post
+from wallet.models import Wallet
 
 
 def get_author_data(user):
@@ -62,6 +65,20 @@ def create_post(request):
 
         if not isinstance(rating, int) or rating < 1 or rating > 5:
             return JsonResponse({'error': 'rating must be an integer between 1 and 5'}, status=400)
+
+        # Check wallet balance and deduct post creation fee
+        post_cost = Decimal(settings.POST_CREATION_COST)
+        wallet, _ = Wallet.objects.get_or_create(user=request.user)
+
+        if not wallet.has_sufficient_funds(post_cost):
+            return JsonResponse({
+                'error': 'Insufficient funds',
+                'required': str(post_cost),
+                'balance': str(wallet.balance)
+            }, status=402)
+
+        # Deduct the fee
+        wallet.withdraw(post_cost, description='Post creation fee')
 
         post = Post.objects.create(
             title=title,

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'accounts',
     'posts',
+    'wallet',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -135,3 +136,11 @@ REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
 TOKEN_BLACKLIST_TTL = int(os.getenv('TOKEN_BLACKLIST_TTL', 60 * 60 * 24 * 2))  # 2 days in seconds
+
+# Stripe configuration
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+
+# Post creation cost
+POST_CREATION_COST = os.getenv('POST_CREATION_COST', '0.25') # Cost in dollars
