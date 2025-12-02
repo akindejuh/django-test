@@ -5,36 +5,41 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import Post
 
 
+def get_author_data(user):
+    """Helper to format author data for responses."""
+    return {
+        'id': user.id,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    }
+
+
+def post_to_dict(post):
+    """Helper to convert post to dictionary."""
+    return {
+        'id': post.id,
+        'title': post.title,
+        'description': post.description,
+        'rating': post.rating,
+        'author': get_author_data(post.author),
+        'created_at': post.created_at.isoformat(),
+        'updated_at': post.updated_at.isoformat(),
+    }
+
+
 @require_http_methods(["GET"])
 def get_all_posts(request):
-    posts = Post.objects.all().order_by('-created_at')
-    data = [
-        {
-            'id': post.id,
-            'title': post.title,
-            'description': post.description,
-            'rating': post.rating,
-            'created_at': post.created_at.isoformat(),
-            'updated_at': post.updated_at.isoformat(),
-        }
-        for post in posts
-    ]
+    posts = Post.objects.select_related('author').order_by('-created_at')
+    data = [post_to_dict(post) for post in posts]
     return JsonResponse({'posts': data})
 
 
 @require_http_methods(["GET"])
 def get_post(request, post_id):
     try:
-        post = Post.objects.get(id=post_id)
-        data = {
-            'id': post.id,
-            'title': post.title,
-            'description': post.description,
-            'rating': post.rating,
-            'created_at': post.created_at.isoformat(),
-            'updated_at': post.updated_at.isoformat(),
-        }
-        return JsonResponse(data)
+        post = Post.objects.select_related('author').get(id=post_id)
+        return JsonResponse(post_to_dict(post))
     except Post.DoesNotExist:
         return JsonResponse({'error': 'Post not found'}, status=404)
 
@@ -42,6 +47,10 @@ def get_post(request, post_id):
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_post(request):
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
     try:
         data = json.loads(request.body)
         title = data.get('title')
@@ -57,16 +66,10 @@ def create_post(request):
         post = Post.objects.create(
             title=title,
             description=description,
-            rating=rating
+            rating=rating,
+            author=request.user
         )
-        return JsonResponse({
-            'id': post.id,
-            'title': post.title,
-            'description': post.description,
-            'rating': post.rating,
-            'created_at': post.created_at.isoformat(),
-            'updated_at': post.updated_at.isoformat(),
-        }, status=201)
+        return JsonResponse(post_to_dict(post), status=201)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
@@ -74,8 +77,17 @@ def create_post(request):
 @csrf_exempt
 @require_http_methods(["PUT", "PATCH"])
 def edit_post(request, post_id):
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
     try:
-        post = Post.objects.get(id=post_id)
+        post = Post.objects.select_related('author').get(id=post_id)
+
+        # Check if user is the author
+        if post.author_id != request.user.id:
+            return JsonResponse({'error': 'You can only edit your own posts'}, status=403)
+
         data = json.loads(request.body)
 
         if 'title' in data:
@@ -89,14 +101,7 @@ def edit_post(request, post_id):
             post.rating = rating
 
         post.save()
-        return JsonResponse({
-            'id': post.id,
-            'title': post.title,
-            'description': post.description,
-            'rating': post.rating,
-            'created_at': post.created_at.isoformat(),
-            'updated_at': post.updated_at.isoformat(),
-        })
+        return JsonResponse(post_to_dict(post))
     except Post.DoesNotExist:
         return JsonResponse({'error': 'Post not found'}, status=404)
     except json.JSONDecodeError:
@@ -106,8 +111,17 @@ def edit_post(request, post_id):
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_post(request, post_id):
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
     try:
         post = Post.objects.get(id=post_id)
+
+        # Check if user is the author
+        if post.author_id != request.user.id:
+            return JsonResponse({'error': 'You can only delete your own posts'}, status=403)
+
         post.delete()
         return JsonResponse({'message': 'Post deleted successfully'})
     except Post.DoesNotExist:
